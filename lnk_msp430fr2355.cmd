@@ -174,7 +174,6 @@ SECTIONS
     /* MSP430 INFO memory segments */
     .info : type = NOINIT{} > INFO
 
-
     /* MSP430 interrupt vectors */
 
     .int00       : {}               > INT00
@@ -247,4 +246,4 @@ SECTIONS
 
 -l msp430fr2355.cmd
 
-
+--stack_size=100
