@@ -152,6 +152,13 @@ SECTIONS
         }
     } > FRAM
 
+    .device_settings :
+    {
+        __device_settings_start = .; /* Define a symbol at the start of the section */
+        *(.device_settings)
+        __device_settings_end = .;   /* Define a symbol at the end of the section */
+    } > FRAM
+
     #ifdef __TI_COMPILER_VERSION__
         #if __TI_COMPILER_VERSION__ >= 15009000
             .TI.ramfunc : {} load=FRAM, run=RAM, table(BINIT)

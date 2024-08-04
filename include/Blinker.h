@@ -8,16 +8,38 @@ extern "C" {
 #include <task.h>
 }
 
-class Blinker
+template<typename port_type,
+         typename pin_type,
+         typename tick_type,
+         const port_type port,
+         const pin_type pin,
+         const tick_type delay>
+class blinker_template
 {
 public:
-    Blinker(uint8_t port, uint8_t pin, TickType_t delay);
-    static void blinkTask(void *pvParameters);
+    blinker_template()
+    {
+        GPIO_setAsOutputPin(port, pin);
+        GPIO_setOutputLowOnPin(port, pin);
+        xTaskCreate(blinkTask, "Blink Task",
+                    configMINIMAL_STACK_SIZE, this, tskIDLE_PRIORITY, NULL);
+    }
 
-private:
-    uint8_t port;
-    uint8_t pin;
-    TickType_t delay;
+    static void toggle()
+    {
+        GPIO_toggleOutputOnPin(port, pin);
+    }
+
+    static void blinkTask(void *pvParameters)
+    {
+        blinker_template *blinker = static_cast<blinker_template *>(pvParameters);
+
+        for (;;)
+        {
+            blinker->toggle();
+            vTaskDelay(delay);
+        }
+    }
 };
 
 #endif /* INCLUDE_BLINKER_H_ */

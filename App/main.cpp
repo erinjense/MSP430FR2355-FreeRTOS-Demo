@@ -10,10 +10,12 @@ extern "C"
 #include "msp430.h"
 }
 
+#include <iostream>
 #include <stdio.h>
 #include <Blinker.h>
 #include <Clock.h>
 #include <UART.h>
+#include <DeviceSettingsManager.h>
 
 /*
  * Configures hardware peripherals
@@ -43,55 +45,58 @@ vTaskFunction2(void *pvParameters);
 static StaticTask_t xPrintTaskBuffer;
 static StackType_t xPrintStack[configMINIMAL_STACK_SIZE];
 
-static StaticTask_t xBlinkTaskBuffer;
-static StackType_t xBlinkStack[configMINIMAL_STACK_SIZE];
-
 static StaticTask_t xCollisionTaskBuffer;
 static StackType_t xCollisionStack[configMINIMAL_STACK_SIZE];
 
-static UART uart;
+/**
+ *
+ */
+EUSCI_A_UART_initParam terminalUartParams = {
+                                .selectClockSource = EUSCI_A_UART_CLOCKSOURCE_SMCLK,
+                                .clockPrescalar = 13,
+                                .firstModReg = 0,
+                                .secondModReg = 37,
+                                .parity = EUSCI_A_UART_NO_PARITY,
+                                .msborLsbFirst = EUSCI_A_UART_LSB_FIRST,
+                                .numberofStopBits = EUSCI_A_UART_ONE_STOP_BIT,
+                                .uartMode = EUSCI_A_UART_MODE,
+                                .overSampling = EUSCI_A_UART_OVERSAMPLING_BAUDRATE_GENERATION,
+};
+
+/**
+ *
+ */
+static UART uart(terminalUartParams);
+
+__attribute__((section(".device_settings"))) DeviceSettings deviceSettingsInstance;
+
+DeviceSettingsManager settingsManager;
+
+namespace
+{
+    const blinker_template<uint8_t, uint8_t, TickType_t,
+                           GPIO_PORT_P1, GPIO_PIN0, pdMS_TO_TICKS(1000)>
+    led1_blinker;
+}
 
 void main( void )
 {
 	prvSetupHardware();
 
-	static Blinker led1Blinker(GPIO_PORT_P1, GPIO_PIN0, pdMS_TO_TICKS(1000));
+	deviceSettingsInstance = settingsManager.get();
 
-	xTaskCreateStatic(led1Blinker.blinkTask, "BlinkLED1",
-	                  configMINIMAL_STACK_SIZE, &led1Blinker, tskIDLE_PRIORITY, xBlinkStack, &xBlinkTaskBuffer);
+//	std::string const s = "1 device ID: " + deviceSettingsInstance.deviceID;
+//	uart.writeString(s);
 
-	xTaskCreateStatic(vTaskFunction, "Hello World", configMINIMAL_STACK_SIZE,
-	                  NULL, tskIDLE_PRIORITY, xPrintStack, &xPrintTaskBuffer);
-
-    xTaskCreateStatic(vTaskFunction2, "Collision", configMINIMAL_STACK_SIZE,
-                      NULL, tskIDLE_PRIORITY, xCollisionStack, &xCollisionTaskBuffer);
+//	DeviceSettings new_settings(0x1234, 0x4321);
+//	settingsManager.save(new_settings);
+  //  uart.writeString("2 device ID: " + deviceSettingsInstance.deviceID);
 
     vTaskStartScheduler();
 
 	for( ;; );
 }
 
-void
-vTaskFunction(void *pvParameters)
-{
-
-    for (;;)
-    {
-        uart.writeString("Hello world");
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-}
-
-void
-vTaskFunction2(void *pvParameters)
-{
-
-    for (;;)
-    {
-        uart.writeString("Collision Test. This is a test. beep boop. meep");
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
 
 /*-----------------------------------------------------------*/
 /* Setup                                                     */
@@ -115,7 +120,6 @@ static void prvSetupHardware( void )
 	PJDIR  = 0xFF;
 
 	static Clock clock;
-
 
     /* Configure LED1 */
     GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
