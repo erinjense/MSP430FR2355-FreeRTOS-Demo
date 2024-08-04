@@ -1,5 +1,5 @@
 #include "UART.h"
-#include <string.h>
+#include <string>
 
 UART::UART(EUSCI_A_UART_initParam &uartParams)
 {
@@ -34,10 +34,12 @@ void UART::writeChar(char c)
     }
 }
 
-void UART::writeString(const char *str) {
-    while (*str)
+void UART::writeString(const std::string &s) {
+    std::string::const_iterator it = s.begin();
+
+    while (it != s.end())
     {
-       writeChar(*str++);
+       writeChar(*it++);
     }
     writeChar('\r');
     writeChar('\n');

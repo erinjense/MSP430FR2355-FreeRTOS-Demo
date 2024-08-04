@@ -10,13 +10,13 @@ extern "C"
 #include "msp430.h"
 }
 
-#include <iostream>
+#include <ostream>
 #include <stdio.h>
 #include <Blinker.h>
 #include <Clock.h>
 #include <UART.h>
 #include <DeviceSettingsManager.h>
-
+#include <sstream>
 /*
  * Configures hardware peripherals
  */
@@ -82,15 +82,6 @@ namespace
 void main( void )
 {
 	prvSetupHardware();
-
-	deviceSettingsInstance = settingsManager.get();
-
-//	std::string const s = "1 device ID: " + deviceSettingsInstance.deviceID;
-//	uart.writeString(s);
-
-//	DeviceSettings new_settings(0x1234, 0x4321);
-//	settingsManager.save(new_settings);
-  //  uart.writeString("2 device ID: " + deviceSettingsInstance.deviceID);
 
     vTaskStartScheduler();
 

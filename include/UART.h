@@ -11,11 +11,13 @@ extern "C"
 #include "semphr.h"
 }
 
+#include <string>
+
 class UART {
 public:
     UART(EUSCI_A_UART_initParam &uartParams);
     void writeChar(char c);
-    void writeString(const char *str);
+    void writeString(const std::string &s);
 
 private:
     static const uint32_t UART_QUEUE_LENGTH = 64;
