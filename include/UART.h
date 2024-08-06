@@ -1,8 +1,6 @@
 #ifndef UART_H
 #define UART_H
 
-
-
 extern "C"
 {
 #include <msp430.h>

@@ -1,22 +1,24 @@
+
 /* Standard includes. */
 
 extern "C"
 {
+#include "msp430.h"
 #include <driverlib.h>
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <task.h>
 #include <timers.h>
-#include "msp430.h"
 }
 
-#include <ostream>
 #include <stdio.h>
-#include <Blinker.h>
+#include <led_template.h>
 #include <Clock.h>
-#include <UART.h>
 #include <DeviceSettingsManager.h>
-#include <sstream>
+#include <ostream>
+#include <ios>
+#include <streambuf>
+
 /*
  * Configures hardware peripherals
  */
@@ -29,13 +31,6 @@ provided the tasks have not reported any errors.  The check task inspects these
 variables to ensure they are still incrementing as expected.  If a variable
 stops incrementing then it is likely that its associate task has stalled. */
 volatile unsigned short usRegTest1Counter = 0, usRegTest2Counter = 0;
-
-/*-----------------------------------------------------------*/
-
-void vBlinkLEDTask(void *pvParameters);
-void vTaskFunction(void *pvParameters);
-void
-vTaskFunction2(void *pvParameters);
 
 /*-----------------------------------------------------------*/
 /* Application                                               */
@@ -51,7 +46,17 @@ static StackType_t xCollisionStack[configMINIMAL_STACK_SIZE];
 /**
  *
  */
-EUSCI_A_UART_initParam terminalUartParams = {
+static __attribute__((section(".device_settings"))) DeviceSettings deviceSettingsInstance;
+
+/**
+ *
+ */
+static DeviceSettingsManager settingsManager;
+
+
+
+#include "UART.h"
+static EUSCI_A_UART_initParam stdOutUartParams = {
                                 .selectClockSource = EUSCI_A_UART_CLOCKSOURCE_SMCLK,
                                 .clockPrescalar = 13,
                                 .firstModReg = 0,
@@ -66,28 +71,57 @@ EUSCI_A_UART_initParam terminalUartParams = {
 /**
  *
  */
-static UART uart(terminalUartParams);
+static UART stdOutUart(stdOutUartParams);
 
-__attribute__((section(".device_settings"))) DeviceSettings deviceSettingsInstance;
 
-DeviceSettingsManager settingsManager;
+
+extern "C" {
+    #include <stdarg.h>
+}
+
+
+// UART write function
+void uart_write_char(char ch) {
+    stdOutUart.writeChar(ch);
+}
+
+
+/*-----------------------------------------------------------*/
+/* Tasks                                                     */
+/*-----------------------------------------------------------*/
 
 namespace
 {
-    const blinker_template<uint8_t, uint8_t, TickType_t,
-                           GPIO_PORT_P1, GPIO_PIN0, pdMS_TO_TICKS(1000)>
-    led1_blinker;
+    const BaseType_t LED1_BLINK_DELAY_MS = 1000;
 }
+
+void
+vTaskLed1(void * pvParameters)
+{
+    const led_template<uint8_t, uint8_t> led1(GPIO_PORT_P1, GPIO_PIN0);
+
+    for (;;)
+    {
+        led1.toggle();
+        vTaskDelay(pdMS_TO_TICKS(LED1_BLINK_DELAY_MS));
+    }
+}
+
+/*-----------------------------------------------------------*/
+/* Application                                               */
+/*-----------------------------------------------------------*/
 
 void main( void )
 {
 	prvSetupHardware();
 
+    xTaskCreate(vTaskLed1, "LED 1 Blink Task",
+                configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL);
+
     vTaskStartScheduler();
 
 	for( ;; );
 }
-
 
 /*-----------------------------------------------------------*/
 /* Setup                                                     */
@@ -112,10 +146,6 @@ static void prvSetupHardware( void )
 
 	static Clock clock;
 
-    /* Configure LED1 */
-    GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
-    GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);
-
     /* Configure LED2 */
     GPIO_setAsOutputPin(GPIO_PORT_P6, GPIO_PIN6);
     GPIO_setOutputLowOnPin(GPIO_PORT_P6, GPIO_PIN6);
@@ -125,100 +155,3 @@ static void prvSetupHardware( void )
 
     taskENABLE_INTERRUPTS();
 }
-
-/*-----------------------------------------------------------*/
-/* Tasks                                                     */
-/*-----------------------------------------------------------*/
-
-
-/*-----------------------------------------------------------*/
-/* Interrupt                                                   */
-/*-----------------------------------------------------------*/
-void vApplicationSetupTimerInterrupt( void )
-{
-    const unsigned short usACLK_Frequency_Hz = 32768;
-
-    /* Stop the timer */
-    Timer_B_stop(TIMER_B0_BASE);
-
-    /* Configure Timer B to use ACLK, clear the timer, enable interrupt, and set it to up mode */
-    Timer_B_initUpModeParam timerInitParams = {
-        .clockSource = TIMER_B_CLOCKSOURCE_ACLK,
-        .clockSourceDivider = TIMER_B_CLOCKSOURCE_DIVIDER_1,
-        .timerPeriod = usACLK_Frequency_Hz / configTICK_RATE_HZ,
-        .timerInterruptEnable_TBIE = TIMER_B_TBIE_INTERRUPT_DISABLE,
-        .captureCompareInterruptEnable_CCR0_CCIE = TIMER_B_CCIE_CCR0_INTERRUPT_ENABLE,
-        .timerClear = TIMER_B_DO_CLEAR,
-        .startTimer = false
-    };
-
-    /* Initialize the timer in up mode */
-    Timer_B_initUpMode(TIMER_B0_BASE, &timerInitParams);
-
-    /* Start the timer in up mode */
-    Timer_B_startCounter(TIMER_B0_BASE, TIMER_B_UP_MODE);
-}
-
-/*-----------------------------------------------------------*/
-/* Hooks                                                     */
-/*-----------------------------------------------------------*/
-
-void vApplicationTickHook( void )
-{
-    static unsigned long ulCounter = 0;
-
-    /* Is it time to toggle the LED again? */
-    ulCounter++;
-
-    /* Just periodically toggle an LED to show that the tick interrupt is
-    running.  Note that this access LED_PORT_OUT in a non-atomic way, so tasks
-    that access the same port must do so from a critical section. */
-    if( ( ulCounter & 0xff ) == 0 )
-    {
-        /* Blink LED 2 */
-        GPIO_toggleOutputOnPin(GPIO_PORT_P6, GPIO_PIN6);
-    }
-}
-
-void vApplicationIdleHook( void )
-{
-	/* Called on each iteration of the idle task.  In this case the idle task
-	just enters a low(ish) power mode. */
-	__bis_SR_register( LPM1_bits + GIE );
-}
-
-void vApplicationMallocFailedHook( void )
-{
-	/* Called if a call to pvPortMalloc() fails because there is insufficient
-	free memory available in the FreeRTOS heap.  pvPortMalloc() is called
-	internally by FreeRTOS API functions that create tasks, queues or
-	semaphores. */
-	taskDISABLE_INTERRUPTS();
-	for( ;; );
-}
-
-void vApplicationStackOverflowHook( TaskHandle_t pxTask, char *pcTaskName )
-{
-	( void ) pxTask;
-	( void ) pcTaskName;
-	
-	/* Run time stack overflow checking is performed if
-	configconfigCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2.  This hook
-	function is called if a stack overflow is detected. */
-	taskDISABLE_INTERRUPTS();
-	for( ;; );
-}
-
-void vApplicationGetIdleTaskMemory( StaticTask_t ** ppxIdleTaskTCBBuffer,
-                                    StackType_t ** ppxIdleTaskStackBuffer,
-                                    configSTACK_DEPTH_TYPE * puxIdleTaskStackSize )
-{
-    // Static allocation of the Idle Task
-    static StaticTask_t xIdleTaskTCB;
-    static StackType_t uxIdleTaskStack[configMINIMAL_STACK_SIZE];
-
-    *ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
-    *ppxIdleTaskStackBuffer = uxIdleTaskStack;
-    *puxIdleTaskStackSize = configMINIMAL_STACK_SIZE;
-}
-

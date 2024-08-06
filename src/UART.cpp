@@ -1,5 +1,4 @@
 #include "UART.h"
-#include <string>
 
 UART::UART(EUSCI_A_UART_initParam &uartParams)
 {
@@ -47,7 +46,7 @@ void UART::writeString(const std::string &s) {
 
 void UART::uartTask(void * pvParameters)
 {
-    UART *uart = static_cast<UART * >(pvParameters);
+    UART *uart = static_cast<UART *>(pvParameters);
     char c;
     while (1)
     {
